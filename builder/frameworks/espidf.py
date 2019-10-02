@@ -583,6 +583,7 @@ env.Prepend(
         join(FRAMEWORK_DIR, "components", "expat", "expat", "lib"),
         join(FRAMEWORK_DIR, "components", "expat", "port", "include"),
         join(FRAMEWORK_DIR, "components", "fatfs", "src"),
+        join(FRAMEWORK_DIR, "components", "fatfs", "vfs"),
         join(FRAMEWORK_DIR, "components", "freemodbus", "modbus", "include"),
         join(FRAMEWORK_DIR, "components", "freemodbus", "modbus_controller"),
         join(FRAMEWORK_DIR, "components", "freertos", "include"),
