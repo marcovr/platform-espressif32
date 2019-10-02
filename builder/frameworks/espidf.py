@@ -67,7 +67,10 @@ def get_toolchain_version():
 
 
 def is_set(parameter, configuration):
-    if int(configuration.get(parameter, 0)):
+    val = configuration.get(parameter, 0)
+    if isinstance(val, str) and val.startswith("CONFIG_"):
+        return is_set(val, configuration)
+    if int(val):
         return True
     return False
 
@@ -546,9 +549,6 @@ env.Prepend(
         join(FRAMEWORK_DIR, "components", "app_update", "include"),
         join(FRAMEWORK_DIR, "components", "asio", "asio", "asio", "include"),
         join(FRAMEWORK_DIR, "components", "asio", "port", "include"),
-        join(FRAMEWORK_DIR, "components", "aws_iot", "include"),
-        join(FRAMEWORK_DIR, "components", "aws_iot",
-             "aws-iot-device-sdk-embedded-C", "include"),
         join(FRAMEWORK_DIR, "components", "bootloader_support", "include"),
         join(FRAMEWORK_DIR, "components", "bootloader_support", "include_bootloader"),
         join(FRAMEWORK_DIR, "components", "bt", "include"),
@@ -564,15 +564,20 @@ env.Prepend(
         join(FRAMEWORK_DIR, "components", "efuse", "esp32", "include"),
         join(FRAMEWORK_DIR, "components", "esp-tls"),
         join(FRAMEWORK_DIR, "components", "esp_adc_cal", "include"),
+        join(FRAMEWORK_DIR, "components", "esp_common", "include"),
+        join(FRAMEWORK_DIR, "components", "esp_eth", "include"),
         join(FRAMEWORK_DIR, "components", "esp_event", "include"),
+        join(FRAMEWORK_DIR, "components", "esp_gdbstub", "include"),
         join(FRAMEWORK_DIR, "components", "esp_http_client", "include"),
         join(FRAMEWORK_DIR, "components", "esp_http_server", "include"),
         join(FRAMEWORK_DIR, "components", "esp_https_server", "include"),
         join(FRAMEWORK_DIR, "components", "esp_https_ota", "include"),
+        join(FRAMEWORK_DIR, "components", "esp_local_ctrl", "include"),
         join(FRAMEWORK_DIR, "components", "esp_ringbuf", "include"),
+        join(FRAMEWORK_DIR, "components", "esp_rom", "include"),
         join(FRAMEWORK_DIR, "components", "esp32", "include"),
         join(FRAMEWORK_DIR, "components", "espcoredump", "include"),
-        join(FRAMEWORK_DIR, "components", "ethernet", "include"),
+        #join(FRAMEWORK_DIR, "components", "ethernet", "include"),
         join(FRAMEWORK_DIR, "components", "expat", "expat", "lib"),
         join(FRAMEWORK_DIR, "components", "expat", "port", "include"),
         join(FRAMEWORK_DIR, "components", "fatfs", "src"),
@@ -587,6 +592,9 @@ env.Prepend(
         join(FRAMEWORK_DIR, "components", "libsodium", "port_include"),
         join(FRAMEWORK_DIR, "components", "log", "include"),
         join(FRAMEWORK_DIR, "components", "lwip", "include", "apps"),
+        join(FRAMEWORK_DIR, "components", "lwip", "include", "apps", "dhcpserver"),
+        join(FRAMEWORK_DIR, "components", "lwip", "include", "apps", "ping"),
+        join(FRAMEWORK_DIR, "components", "lwip", "include", "apps", "sntp"),
         join(FRAMEWORK_DIR, "components", "lwip", "lwip", "src", "include"),
         join(FRAMEWORK_DIR, "components", "lwip", "port", "esp32", "include"),
         join(FRAMEWORK_DIR, "components", "lwip", "port", "esp32", "include", "arch"),
@@ -595,7 +603,7 @@ env.Prepend(
         join(FRAMEWORK_DIR, "components", "mbedtls", "port", "include"),
         join(FRAMEWORK_DIR, "components", "mbedtls", "mbedtls", "include"),
         join(FRAMEWORK_DIR, "components", "mdns", "include"),
-        join(FRAMEWORK_DIR, "components", "micro-ecc", "micro-ecc"),
+        #join(FRAMEWORK_DIR, "components", "micro-ecc", "micro-ecc"),
         join(FRAMEWORK_DIR, "components", "mqtt", "esp-mqtt", "include"),
         join(FRAMEWORK_DIR, "components", "nghttp", "nghttp2", "lib", "includes"),
         join(FRAMEWORK_DIR, "components", "nghttp", "port", "include"),
@@ -609,7 +617,7 @@ env.Prepend(
         join(FRAMEWORK_DIR, "components", "protocomm", "include", "transports"),
         join(FRAMEWORK_DIR, "components", "pthread", "include"),
         join(FRAMEWORK_DIR, "components", "sdmmc", "include"),
-        join(FRAMEWORK_DIR, "components", "smartconfig_ack", "include"),
+        #join(FRAMEWORK_DIR, "components", "smartconfig_ack", "include"),
         join(FRAMEWORK_DIR, "components", "soc", "esp32", "include"),
         join(FRAMEWORK_DIR, "components", "soc", "include"),
         join(FRAMEWORK_DIR, "components", "spi_flash", "include"),
@@ -624,7 +632,9 @@ env.Prepend(
         join(FRAMEWORK_DIR, "components", "wifi_provisioning", "include"),
         join(FRAMEWORK_DIR, "components", "wpa_supplicant", "include"),
         join(FRAMEWORK_DIR, "components", "wpa_supplicant", "port", "include"),
-        join(FRAMEWORK_DIR, "components", "xtensa-debug-module", "include")
+        join(FRAMEWORK_DIR, "components", "xtensa-debug-module", "include"),
+	    join(FRAMEWORK_DIR, "components", "xtensa", "include"),
+	    join(FRAMEWORK_DIR, "components", "xtensa", "esp32", "include")
     ],
 
     LIBPATH=[
