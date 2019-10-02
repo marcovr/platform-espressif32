@@ -575,6 +575,8 @@ env.Prepend(
         join(FRAMEWORK_DIR, "components", "esp_local_ctrl", "include"),
         join(FRAMEWORK_DIR, "components", "esp_ringbuf", "include"),
         join(FRAMEWORK_DIR, "components", "esp_rom", "include"),
+        join(FRAMEWORK_DIR, "components", "esp_websocket_client", "include"),
+        join(FRAMEWORK_DIR, "components", "esp_wifi", "include"),
         join(FRAMEWORK_DIR, "components", "esp32", "include"),
         join(FRAMEWORK_DIR, "components", "espcoredump", "include"),
         #join(FRAMEWORK_DIR, "components", "ethernet", "include"),
