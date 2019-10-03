@@ -549,6 +549,7 @@ env.Prepend(
         join(FRAMEWORK_DIR, "components", "app_update", "include"),
         join(FRAMEWORK_DIR, "components", "asio", "asio", "asio", "include"),
         join(FRAMEWORK_DIR, "components", "asio", "port", "include"),
+        join(FRAMEWORK_DIR, "components", "bootloader", "subproject", "components", "micro-ecc", "micro-ecc"),
         join(FRAMEWORK_DIR, "components", "bootloader_support", "include"),
         join(FRAMEWORK_DIR, "components", "bootloader_support", "include_bootloader"),
         join(FRAMEWORK_DIR, "components", "bt", "include"),
