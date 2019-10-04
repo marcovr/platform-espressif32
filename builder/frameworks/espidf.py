@@ -343,12 +343,12 @@ def build_heap_lib(sdk_params):
     return build_component(
         join(FRAMEWORK_DIR, "components", "heap"), {"src_filter": src_filter})
 
-
 def build_espidf_bootloader():
     envsafe = env.Clone()
     envsafe.Append(CPPDEFINES=[("BOOTLOADER_BUILD", 1)])
     envsafe.Replace(
         LIBPATH=[
+            join(FRAMEWORK_DIR, "components", "esp_rom", "esp32", "ld"),
             join(FRAMEWORK_DIR, "components", "esp32", "ld"),
             join(FRAMEWORK_DIR, "components", "esp32", "lib"),
             join(FRAMEWORK_DIR, "components", "bootloader", "subproject", "main")
@@ -361,16 +361,18 @@ def build_espidf_bootloader():
             "-Wl,--gc-sections",
             "-T", "esp32.bootloader.ld",
             "-T", "esp32.rom.ld",
-            "-T", "esp32.rom.spiram_incompatible_fns.ld",
             "-T", "esp32.peripherals.ld",
             "-T", "esp32.bootloader.rom.ld",
+            "-T", "esp32.rom.newlib-funcs.ld",
+            "-T", "esp32.rom.libgcc.ld"
         ]
     ),
 
     envsafe.Append(
         CPPPATH=[
             join(FRAMEWORK_DIR, "components", "esp32"),
-            join(FRAMEWORK_DIR, "components", "bootloader_support", "include_priv")
+            join(FRAMEWORK_DIR, "components", "bootloader_support", "include_priv"),
+            join(FRAMEWORK_DIR, "components", "esp_rom", "include"),
         ]
     )
 
@@ -379,7 +381,7 @@ def build_espidf_bootloader():
             envsafe.BuildLibrary(
                 join("$BUILD_DIR", "bootloader", "bootloader_support"),
                 join(FRAMEWORK_DIR, "components", "bootloader_support"),
-                src_filter="+<*> -<test>"
+                src_filter="+<*> -<test> -<src/idf>"
             ),
             envsafe.BuildLibrary(
                 join("$BUILD_DIR", "bootloader", "log"),
@@ -552,8 +554,18 @@ env.Prepend(
         join(FRAMEWORK_DIR, "components", "bootloader", "subproject", "components", "micro-ecc", "micro-ecc"),
         join(FRAMEWORK_DIR, "components", "bootloader_support", "include"),
         join(FRAMEWORK_DIR, "components", "bootloader_support", "include_bootloader"),
+        join(FRAMEWORK_DIR, "components", "bt", "common", "btc", "include"),
+        join(FRAMEWORK_DIR, "components", "bt", "common", "include"),
+        join(FRAMEWORK_DIR, "components", "bt", "common", "osi", "include"),
+        join(FRAMEWORK_DIR, "components", "bt", "esp_ble_mesh", "api"),
+        join(FRAMEWORK_DIR, "components", "bt", "esp_ble_mesh", "api", "core", "include"),
+        join(FRAMEWORK_DIR, "components", "bt", "esp_ble_mesh", "api", "models", "include"),
+        join(FRAMEWORK_DIR, "components", "bt", "esp_ble_mesh", "btc", "include"),
+        join(FRAMEWORK_DIR, "components", "bt", "esp_ble_mesh", "mesh_core", "include"),
+        join(FRAMEWORK_DIR, "components", "bt", "esp_ble_mesh", "mesh_models", "client", "include"),
+        join(FRAMEWORK_DIR, "components", "bt", "esp_ble_mesh", "mesh_models", "common", "include"),
         join(FRAMEWORK_DIR, "components", "bt", "include"),
-        join(FRAMEWORK_DIR, "components", "bt", "bluedroid", "api", "include", "api"),
+        join(FRAMEWORK_DIR, "components", "bt", "host", "bluedroid", "api", "include", "api"),
         join(FRAMEWORK_DIR, "components", "coap", "port", "include"),
         join(FRAMEWORK_DIR, "components", "coap", "port", "include", "coap"),
         join(FRAMEWORK_DIR, "components", "coap", "libcoap", "include"),
@@ -644,6 +656,7 @@ env.Prepend(
     LIBPATH=[
         join(FRAMEWORK_DIR, "components", "esp32"),
         join(FRAMEWORK_DIR, "components", "esp32", "ld"),
+        join(FRAMEWORK_DIR, "components", "esp_rom", "esp32", "ld"),
         join(FRAMEWORK_DIR, "components", "esp32", "ld", "wifi_iram_opt"),
         join(FRAMEWORK_DIR, "components", "esp32", "lib"),
         join(FRAMEWORK_DIR, "components", "bt", "lib"),
@@ -693,10 +706,16 @@ env.Append(
         "-u", "esp_app_desc",
         "-u", "ld_include_panic_highint_hdl",
         "-T", "esp32.project.ld",
-        "-T", "esp32.rom.ld",
         "-T", "esp32.peripherals.ld",
+        "-T", "esp32.rom.ld",
         "-T", "esp32.rom.libgcc.ld",
-        "-T", "esp32.rom.spiram_incompatible_fns.ld"
+        "-T", "esp32.rom.newlib-data.ld",
+        "-T", "esp32.rom.newlib-funcs.ld",
+        "-T", "esp32.rom.newlib-locale.ld",
+        "-T", "esp32.rom.newlib-nano.ld",
+        "-T", "esp32.rom.redefined.ld",
+        "-T", "esp32.rom.spiflash.ld",
+        "-T", "esp32.rom.syscalls.ld"
     ],
 
     FLASH_EXTRA_IMAGES=[
