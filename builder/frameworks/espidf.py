@@ -21,7 +21,7 @@ https://github.com/espressif/esp-idf
 """
 
 from glob import glob
-from os import listdir, walk
+from os import listdir, walk, name as osname
 from os.path import abspath, basename, isdir, isfile, join
 
 from shutil import copy
@@ -42,6 +42,9 @@ if isdir(ulp_dir) and listdir(ulp_dir):
 
 FRAMEWORK_DIR = platform.get_package_dir("framework-espidf")
 assert FRAMEWORK_DIR and isdir(FRAMEWORK_DIR)
+
+TOOLCHAIN_DIR = platform.get_package_dir("toolchain-xtensa32")
+assert TOOLCHAIN_DIR and isdir(TOOLCHAIN_DIR)
 
 if "arduino" in env.subst("$PIOFRAMEWORK"):
     ARDUINO_FRAMEWORK_DIR = platform.get_package_dir(
@@ -164,6 +167,7 @@ def build_component(path, component_config):
         join("$BUILD_DIR", "%s" % basename(path)), path,
         src_filter=component_config.get("src_filter", "+<*> -<test*>"))
 
+    # TODO: If this already generates the dumps, why do we need objdump in ldgen?
     component_sections = env.Command(
         "${SOURCE}.sections_info", component,
         env.VerboseAction(
@@ -175,7 +179,6 @@ def build_component(path, component_config):
 
     return component
 
-
 def get_sdk_configuration(config_path):
     if not isfile(config_path):
         sys.stderr.write(
@@ -184,11 +187,29 @@ def get_sdk_configuration(config_path):
 
     config = {}
     with open(config_path) as fp:
+        ifdef_key = {}
         for l in fp.readlines():
+            if not l or (not l.startswith("#ifdef") and not l.startswith("#endif") and not l.startswith("#define")):
+                continue
+
+            values = l.split()
+            if l.startswith("#ifdef"):
+                ifdef_key[values[1]] = values[1] in config
+            elif l.startswith("#endif"):
+                ifdef_key.pop(list(ifdef_key.keys())[-1])
             if not l.startswith("#define"):
                 continue
-            values = l.split()
-            config[values[1]] = values[2]
+
+            should_set = True
+            for k in ifdef_key.keys():
+                if not ifdef_key[k]:
+                    should_set = False
+                    break
+
+            if should_set:
+                key = values[1]
+                value = values[2] if len(values) > 2 else 1
+                config[key] = value
 
     return config
 
@@ -300,7 +321,7 @@ def build_libsodium_lib():
 
 
 def build_wpa_supplicant_lib():
-    defines = ["EMBEDDED_SUPP", "IEEE8021X_EAPOL", "EAP_PEER_METHOD",
+    defines = ["ESP_SUPPLICANT", "IEEE8021X_EAPOL", "EAP_PEER_METHOD",
                "EAP_MSCHAPv2", "EAP_TTLS", "EAP_TLS", "EAP_PEAP",
                "USE_WPA2_TASK", "CONFIG_WPS2", "CONFIG_WPS_PIN",
                "USE_WPS_TASK", "ESPRESSIF_USE", "ESP32_WORKAROUND",
@@ -416,12 +437,11 @@ def build_espidf_bootloader():
     )
 
 
-def generate_section_info(target, source, env):
+def generate_lib_info(target, source, env):
     with open(target[0].get_path(), "w") as fp:
-        fp.write("\n".join(s.get_path() + ".sections_info" for s in source))
+        fp.write("\n".join(s.get_path() for s in source))
 
     return None
-
 
 def find_framework_service_files(search_path):
     result = {}
@@ -442,6 +462,10 @@ def find_framework_service_files(search_path):
 
     return result
 
+def exe_path(path):
+    if osname == "nt":
+        return "%s.exe" % path
+    return path
 
 def generate_project_ld_script(target, source, env):
     project_files = find_framework_service_files(
@@ -449,7 +473,7 @@ def generate_project_ld_script(target, source, env):
 
     args = {
         "script": join(FRAMEWORK_DIR, "tools", "ldgen", "ldgen.py"),
-        "sections": source[0].get_path(),
+        "libs_file": source[0].get_path(),
         "input": join(
             FRAMEWORK_DIR, "components", "esp32", "ld", "esp32.project.ld.in"),
         "sdk_header": join(env.subst("$PROJECTSRC_DIR"), "sdkconfig.h"),
@@ -457,16 +481,19 @@ def generate_project_ld_script(target, source, env):
             ["\"%s\"" % f for f in project_files.get("lf_files")]),
         "output": target[0].get_path(),
         "kconfig": join(FRAMEWORK_DIR, "Kconfig"),
-        "kconfigs_projbuild": "COMPONENT_KCONFIGS_PROJBUILD=%s" % "#".join(
+        "kconfigs_projbuild": "COMPONENT_KCONFIGS_PROJBUILD=%s" % " ".join(
             ["%s" % f for f in project_files.get("kconfig_build_files")]),
-        "kconfig_files": "COMPONENT_KCONFIGS=%s" % "#".join(
+        "kconfig_files": "COMPONENT_KCONFIGS=%s" % " ".join(
             ["%s" % f for f in project_files.get("kconfig_files")]),
+        "framework_dir": FRAMEWORK_DIR,
+        "objdump": join(TOOLCHAIN_DIR, "bin", exe_path("xtensa-esp32-elf-objdump")),
     }
 
-    cmd = ('"$PYTHONEXE" "{script}" --sections "{sections}" --input "{input}" '
+    cmd = ('"$PYTHONEXE" "{script}" --libraries-file "{libs_file}" --input "{input}" '
         '--config "{sdk_header}" --fragments {fragments} --output "{output}" '
         '--kconfig "{kconfig}" --env "{kconfigs_projbuild}" '
-        '--env "{kconfig_files}" --env "IDF_CMAKE=n" --env "IFS=#" '
+        '--env "{kconfig_files}" --env "IDF_CMAKE=n" --env "IDF_PATH={framework_dir}" '
+        '--objdump "{objdump}" '
         '--env "IDF_TARGET=\\\"esp32\\\""').format(**args)
 
     env.Execute(cmd)
@@ -554,42 +581,47 @@ env.Prepend(
         join(FRAMEWORK_DIR, "components", "bootloader", "subproject", "components", "micro-ecc", "micro-ecc"),
         join(FRAMEWORK_DIR, "components", "bootloader_support", "include"),
         join(FRAMEWORK_DIR, "components", "bootloader_support", "include_bootloader"),
-        join(FRAMEWORK_DIR, "components", "bt", "common", "btc", "include"),
-        join(FRAMEWORK_DIR, "components", "bt", "common", "include"),
-        join(FRAMEWORK_DIR, "components", "bt", "common", "osi", "include"),
-        join(FRAMEWORK_DIR, "components", "bt", "esp_ble_mesh", "api"),
-        join(FRAMEWORK_DIR, "components", "bt", "esp_ble_mesh", "api", "core", "include"),
-        join(FRAMEWORK_DIR, "components", "bt", "esp_ble_mesh", "api", "models", "include"),
-        join(FRAMEWORK_DIR, "components", "bt", "esp_ble_mesh", "btc", "include"),
-        join(FRAMEWORK_DIR, "components", "bt", "esp_ble_mesh", "mesh_core", "include"),
-        join(FRAMEWORK_DIR, "components", "bt", "esp_ble_mesh", "mesh_models", "client", "include"),
-        join(FRAMEWORK_DIR, "components", "bt", "esp_ble_mesh", "mesh_models", "common", "include"),
-        join(FRAMEWORK_DIR, "components", "bt", "include"),
-        join(FRAMEWORK_DIR, "components", "bt", "host", "bluedroid", "api", "include", "api"),
+        # Bluetooth is currently unsupported
+        # join(FRAMEWORK_DIR, "components", "bt", "common", "btc", "include"),
+        # join(FRAMEWORK_DIR, "components", "bt", "common", "include"),
+        # join(FRAMEWORK_DIR, "components", "bt", "common", "osi", "include"),
+        # join(FRAMEWORK_DIR, "components", "bt", "esp_ble_mesh", "api"),
+        # join(FRAMEWORK_DIR, "components", "bt", "esp_ble_mesh", "api", "core", "include"),
+        # join(FRAMEWORK_DIR, "components", "bt", "esp_ble_mesh", "api", "models", "include"),
+        # join(FRAMEWORK_DIR, "components", "bt", "esp_ble_mesh", "btc", "include"),
+        # join(FRAMEWORK_DIR, "components", "bt", "esp_ble_mesh", "mesh_core"),
+        # join(FRAMEWORK_DIR, "components", "bt", "esp_ble_mesh", "mesh_core", "include"),
+        # join(FRAMEWORK_DIR, "components", "bt", "esp_ble_mesh", "mesh_core", "settings"),
+        # join(FRAMEWORK_DIR, "components", "bt", "esp_ble_mesh", "mesh_models", "client", "include"),
+        # join(FRAMEWORK_DIR, "components", "bt", "esp_ble_mesh", "mesh_models", "common", "include"),
+        # join(FRAMEWORK_DIR, "components", "bt", "include"),
         join(FRAMEWORK_DIR, "components", "coap", "port", "include"),
         join(FRAMEWORK_DIR, "components", "coap", "port", "include", "coap"),
         join(FRAMEWORK_DIR, "components", "coap", "libcoap", "include"),
-        join(FRAMEWORK_DIR, "components", "coap",
-             "libcoap", "include", "coap"),
+        join(FRAMEWORK_DIR, "components", "coap", "libcoap", "include", "coap2"),
         join(FRAMEWORK_DIR, "components", "console"),
         join(FRAMEWORK_DIR, "components", "driver", "include"),
         join(FRAMEWORK_DIR, "components", "efuse", "include"),
         join(FRAMEWORK_DIR, "components", "efuse", "esp32", "include"),
         join(FRAMEWORK_DIR, "components", "esp-tls"),
+        join(FRAMEWORK_DIR, "components", "esp-tls", "private_include"),
         join(FRAMEWORK_DIR, "components", "esp_adc_cal", "include"),
         join(FRAMEWORK_DIR, "components", "esp_common", "include"),
         join(FRAMEWORK_DIR, "components", "esp_eth", "include"),
         join(FRAMEWORK_DIR, "components", "esp_event", "include"),
         join(FRAMEWORK_DIR, "components", "esp_gdbstub", "include"),
+        join(FRAMEWORK_DIR, "components", "esp_gdbstub", "private_include"),
         join(FRAMEWORK_DIR, "components", "esp_http_client", "include"),
         join(FRAMEWORK_DIR, "components", "esp_http_server", "include"),
         join(FRAMEWORK_DIR, "components", "esp_https_server", "include"),
         join(FRAMEWORK_DIR, "components", "esp_https_ota", "include"),
-        join(FRAMEWORK_DIR, "components", "esp_local_ctrl", "include"),
+        # esp_local_ctrl is currently unsupported (depends on protocomm, bt)
+        # join(FRAMEWORK_DIR, "components", "esp_local_ctrl", "include"),
         join(FRAMEWORK_DIR, "components", "esp_ringbuf", "include"),
         join(FRAMEWORK_DIR, "components", "esp_rom", "include"),
         join(FRAMEWORK_DIR, "components", "esp_websocket_client", "include"),
         join(FRAMEWORK_DIR, "components", "esp_wifi", "include"),
+        join(FRAMEWORK_DIR, "components", "esp_wifi", "esp32", "include"),
         join(FRAMEWORK_DIR, "components", "esp32", "include"),
         join(FRAMEWORK_DIR, "components", "espcoredump", "include"),
         #join(FRAMEWORK_DIR, "components", "ethernet", "include"),
@@ -597,6 +629,8 @@ env.Prepend(
         join(FRAMEWORK_DIR, "components", "expat", "port", "include"),
         join(FRAMEWORK_DIR, "components", "fatfs", "src"),
         join(FRAMEWORK_DIR, "components", "fatfs", "vfs"),
+        join(FRAMEWORK_DIR, "components", "fatfs", "diskio"),
+        join(FRAMEWORK_DIR, "components", "freemodbus", "common", "include"),
         join(FRAMEWORK_DIR, "components", "freemodbus", "modbus", "include"),
         join(FRAMEWORK_DIR, "components", "freemodbus", "modbus_controller"),
         join(FRAMEWORK_DIR, "components", "freertos", "include"),
@@ -628,15 +662,17 @@ env.Prepend(
         join(FRAMEWORK_DIR, "components", "nvs_flash", "include"),
         join(FRAMEWORK_DIR, "components", "openssl", "include"),
         join(FRAMEWORK_DIR, "components", "protobuf-c", "protobuf-c"),
-        join(FRAMEWORK_DIR, "components", "protocomm", "include", "common"),
-        join(FRAMEWORK_DIR, "components", "protocomm", "include", "security"),
-        join(FRAMEWORK_DIR, "components", "protocomm", "include", "transports"),
+        # protocomm is currently unsupported (depends on bt)
+        #join(FRAMEWORK_DIR, "components", "protocomm", "include", "common"),
+        #join(FRAMEWORK_DIR, "components", "protocomm", "include", "security"),
+        #join(FRAMEWORK_DIR, "components", "protocomm", "include", "transports"),
         join(FRAMEWORK_DIR, "components", "pthread", "include"),
         join(FRAMEWORK_DIR, "components", "sdmmc", "include"),
         #join(FRAMEWORK_DIR, "components", "smartconfig_ack", "include"),
         join(FRAMEWORK_DIR, "components", "soc", "esp32", "include"),
         join(FRAMEWORK_DIR, "components", "soc", "include"),
         join(FRAMEWORK_DIR, "components", "spi_flash", "include"),
+        join(FRAMEWORK_DIR, "components", "spi_flash", "private_include"),
         join(FRAMEWORK_DIR, "components", "spiffs", "include"),
         join(FRAMEWORK_DIR, "components", "tcp_transport", "include"),
         join(FRAMEWORK_DIR, "components", "tcpip_adapter", "include"),
@@ -647,6 +683,8 @@ env.Prepend(
         join(FRAMEWORK_DIR, "components", "wear_levelling", "include"),
         join(FRAMEWORK_DIR, "components", "wifi_provisioning", "include"),
         join(FRAMEWORK_DIR, "components", "wpa_supplicant", "include"),
+        join(FRAMEWORK_DIR, "components", "wpa_supplicant", "include", "esp_supplicant"),
+        join(FRAMEWORK_DIR, "components", "wpa_supplicant", "src"),
         join(FRAMEWORK_DIR, "components", "wpa_supplicant", "port", "include"),
         join(FRAMEWORK_DIR, "components", "xtensa-debug-module", "include"),
 	    join(FRAMEWORK_DIR, "components", "xtensa", "include"),
@@ -659,23 +697,31 @@ env.Prepend(
         join(FRAMEWORK_DIR, "components", "esp_rom", "esp32", "ld"),
         join(FRAMEWORK_DIR, "components", "esp32", "ld", "wifi_iram_opt"),
         join(FRAMEWORK_DIR, "components", "esp32", "lib"),
-        join(FRAMEWORK_DIR, "components", "bt", "lib"),
+        join(FRAMEWORK_DIR, "components", "esp_wifi", "lib_esp32"),        
+        join(FRAMEWORK_DIR, "components", "bt", "controller", "lib"),
         join(FRAMEWORK_DIR, "components", "newlib", "lib"),
+        join(FRAMEWORK_DIR, "components", "xtensa", "esp32"),
         "$BUILD_DIR"
     ],
 
     LIBS=[
-        "btdm_app", "hal", "coexist", "core", "net80211", "phy", "rtc", "pp",
-        "wpa", "wpa2", "espnow", "wps", "smartconfig", "mesh", "c", "m",
-        "gcc", "stdc++"
+        "btdm_app", 
+        "hal", "coexist", "core", "net80211", "phy", "rtc", "pp",
+        "espnow", "smartconfig", "mesh",
+
+        # Not available in ESP-IDF v4.0
+        #"wpa", "wpa2", "wps", 
+
+        "c", "m", "gcc", "stdc++"
     ]
 )
 
-for root, dirs, _ in walk(join(
-        FRAMEWORK_DIR, "components", "bt", "bluedroid")):
-    for d in dirs:
-        if (d == "include"):
-            env.Prepend(CPPPATH=[join(root, d)])
+# Bluetooth is currently unsupported
+# for root, dirs, _ in walk(join(
+#         FRAMEWORK_DIR, "components", "bt", "host", "bluedroid")):
+#     for d in dirs:
+#         if (d == "include"):
+#             env.Prepend(CPPPATH=[join(root, d)])
 
 env.Prepend(
     CFLAGS=["-Wno-old-style-declaration"],
@@ -838,7 +884,11 @@ ignore_dirs = (
     "bootloader",
     "esptool_py",
     "idf_test",
-    "partition_table"
+    "partition_table",
+    # Bluetooth is currently unsupported
+    "bt",
+    # esp_local_ctrl is currently unsupported (depends on protocomm, bt)
+    "esp_local_ctrl",
 )
 
 special_src_filter = {
@@ -880,20 +930,22 @@ for component, src_filter in special_src_filter.items():
 
 libs.extend((
     build_lwip_lib(sdk_params),
-    build_protocomm_lib(sdk_params),
+    # Requires BT
+    #build_protocomm_lib(sdk_params),
     build_heap_lib(sdk_params),
     build_rtos_lib(),
     build_libsodium_lib(),
     build_wpa_supplicant_lib(),
-    build_wifi_provisioning_lib()
+    # Requires protocomm
+    #build_wifi_provisioning_lib()
 ))
 
-project_sections = env.Command(
-    join("$BUILD_DIR", "ldgen.section_infos"), libs, generate_section_info)
+project_libraries = env.Command(
+    join("$BUILD_DIR", "ldgen.libraries"), libs, generate_lib_info)
 
 project_linker_script = env.Command(
     join("$BUILD_DIR", "esp32.project.ld"),
-    project_sections, generate_project_ld_script,
+    project_libraries, generate_project_ld_script,
     ENV={"PYTHONPATH": join(FRAMEWORK_DIR, "platformio", "package_deps",
                             "py%d" % sys.version_info.major)})
 
