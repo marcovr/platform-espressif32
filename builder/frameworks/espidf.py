@@ -187,29 +187,11 @@ def get_sdk_configuration(config_path):
 
     config = {}
     with open(config_path) as fp:
-        ifdef_key = {}
         for l in fp.readlines():
-            if not l or (not l.startswith("#ifdef") and not l.startswith("#endif") and not l.startswith("#define")):
-                continue
-
-            values = l.split()
-            if l.startswith("#ifdef"):
-                ifdef_key[values[1]] = values[1] in config
-            elif l.startswith("#endif"):
-                ifdef_key.pop(list(ifdef_key.keys())[-1])
             if not l.startswith("#define"):
                 continue
-
-            should_set = True
-            for k in ifdef_key.keys():
-                if not ifdef_key[k]:
-                    should_set = False
-                    break
-
-            if should_set:
-                key = values[1]
-                value = values[2] if len(values) > 2 else 1
-                config[key] = value
+            values = l.split()
+            config[values[1]] = values[2]
 
     return config
 
