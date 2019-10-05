@@ -166,12 +166,6 @@ def build_component(path, component_config):
     component = envsafe.BuildLibrary(
         join("$BUILD_DIR", "%s" % basename(path)), path,
         src_filter=component_config.get("src_filter", "+<*> -<test*>"))
-
-    # TODO: If this already generates the dumps, why do we need objdump in ldgen?
-    component_sections = env.Command(
-        "${SOURCE}.sections_info", component,
-        env.VerboseAction(
-            "xtensa-esp32-elf-objdump -h $SOURCE > $TARGET", "Generating $TARGET")
     )
 
     # Section files are used in linker script generation process
@@ -474,7 +468,7 @@ def generate_project_ld_script(target, source, env):
     cmd = ('"$PYTHONEXE" "{script}" --libraries-file "{libs_file}" --input "{input}" '
         '--config "{sdk_header}" --fragments {fragments} --output "{output}" '
         '--kconfig "{kconfig}" --env "{kconfigs_projbuild}" '
-        '--env "{kconfig_files}" --env "IDF_CMAKE=n" --env "IDF_PATH={framework_dir}" '
+        '--env "{kconfig_files}" --env "IDF_CMAKE=n" --env "IFS=#" --env "IDF_PATH={framework_dir}" '
         '--objdump "{objdump}" '
         '--env "IDF_TARGET=\\\"esp32\\\""').format(**args)
 
