@@ -424,11 +424,22 @@ def generate_lib_info(target, source, env):
 
     return None
 
-def find_framework_service_files(search_path):
+def find_framework_service_files():
     result = {}
     result['lf_files'] = list()
     result['kconfig_files'] = list()
     result['kconfig_build_files'] = list()
+    search_path = join(FRAMEWORK_DIR, "components")
+    for d in listdir(search_path):
+        for f in listdir(join(search_path, d)):
+            if f == "linker.lf":
+                result['lf_files'].append(join(search_path, d, f))
+            elif f == "Kconfig.projbuild":
+                result['kconfig_build_files'].append(join(search_path, d, f))
+            elif f == "Kconfig":
+                result['kconfig_files'].append(join(search_path, d, f))
+
+    search_path = join(FRAMEWORK_DIR, "examples", "common_components")
     for d in listdir(search_path):
         for f in listdir(join(search_path, d)):
             if f == "linker.lf":
@@ -449,8 +460,7 @@ def exe_path(path):
     return path
 
 def generate_project_ld_script(target, source, env):
-    project_files = find_framework_service_files(
-        join(FRAMEWORK_DIR, "components"))
+    project_files = find_framework_service_files()
 
     args = {
         "script": join(FRAMEWORK_DIR, "tools", "ldgen", "ldgen.py"),
@@ -555,6 +565,7 @@ def configure_exceptions(sdk_params):
 
 env.Prepend(
     CPPPATH=[
+        join(FRAMEWORK_DIR, "examples", "common_components", "protocol_examples_common", "include"),
         join(FRAMEWORK_DIR, "components", "app_trace", "include"),
         join(FRAMEWORK_DIR, "components", "app_update", "include"),
         join(FRAMEWORK_DIR, "components", "asio", "asio", "asio", "include"),
@@ -894,10 +905,14 @@ special_env = (
     "wifi_provisioning"
 )
 
-for d in listdir(join(FRAMEWORK_DIR, "components")):
+for d in listdir(join(FRAMEWORK_DIR, "components")) + listdir(join(FRAMEWORK_DIR, "examples", "common_components")):
     if d in special_src_filter or d in special_env or d in ignore_dirs:
         continue
     component_dir = join(FRAMEWORK_DIR, "components", d)
+    if isdir(component_dir):
+        libs.append(build_component(
+            component_dir, extract_component_config(component_dir)))
+    component_dir = join(FRAMEWORK_DIR, "examples", "common_components", d)
     if isdir(component_dir):
         libs.append(build_component(
             component_dir, extract_component_config(component_dir)))
